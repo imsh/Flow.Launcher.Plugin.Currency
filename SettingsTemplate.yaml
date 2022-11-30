@@ -6,6 +6,12 @@ body:
         Choose the age, in hours, of the downloaded currency rates file before the plugin will download a new version. 
         The reference rates are usually updated around 16:00 CET on every working day, except on TARGET closing days.
         See https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html for more details.
+  - type: input
+    attributes:
+      name: default_currency
+      label: "Default currency:"
+      description: >
+        Type 3 letter currency to be used as destination currency if only source currency is provided
   - type: dropdown
     attributes:
       name: max_age

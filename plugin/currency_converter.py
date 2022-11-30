@@ -54,6 +54,7 @@ class Currency(Flox):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.max_age = self.settings.get("max_age")
+        self.default_currency = self.settings.get("default_currency")
         self.logger_level("info")
 
     def query(self, query):
@@ -68,11 +69,15 @@ class Currency(Flox):
             )
 
         elif len(args) == 2:
-            hint = self.applicablerates(args[1])
-            self.add_item(
-                title=(f", ".join([f"{x}" for x in hint])),
-                subtitle=_("Source currency"),
-            )
+            if len(args[1]) <= 2:
+                hint = self.applicablerates(args[1])
+                self.add_item(
+                    title=(f", ".join([f"{x}" for x in hint])),
+                    subtitle=_("Source currency"),
+                )
+            elif len(self.default_currency) == 3:
+                self.run_conversion(args[0], args[1], self.default_currency)
+                
         elif len(args) == 3:
             if len(args[2]) <= 2:
                 hint = self.applicablerates(args[2])
@@ -112,51 +117,53 @@ class Currency(Flox):
                     )
                 # Do the conversion
                 else:
-                    # First strip any commas from the amount
-                    args[0] = args[0].replace(",", "")
-                    # Get the rates
-                    ratesxml_returncode = self.getrates_xml(self.max_age)
-                    if ratesxml_returncode == 200:
-                        ratedict = self.populate_rates("eurofxref-daily.xml")
-                        conv = self.currconv(ratedict, args[1], args[2], args[0])
-                        if len(conv) == 1:
-                            # Something has gone wrong
-                            self.add_item(title="{}".format(conv[0]))
-                        else:
-                            # Set up some decimal precisions to use in the result
-                            # amount and converted amount use precision as entered. Conversion rate uses min 3 places
-                            if "." in args[0]:
-                                dec_prec = len(args[0].split(".")[1])
-                                if dec_prec < 3:
-                                    dec_prec2 = 3
-                                else:
-                                    dec_prec2 = dec_prec
-                            else:
-                                dec_prec = 1
-                                dec_prec2 = 3
-                            fmt_str = "%.{0:d}f".format(dec_prec)
-
-                            self.add_item(
-                                title=(
-                                    f"{locale.format_string(fmt_str, float(args[0]), grouping=True)} {args[1].upper()} = "
-                                    f"{locale.format_string(fmt_str, round(decimal.Decimal(conv[1]), dec_prec), grouping=True)} "
-                                    f"{args[2].upper()} "
-                                    f"(1 {args[1].upper()} = "
-                                    f"{round(decimal.Decimal(conv[1]) / decimal.Decimal(args[0]),dec_prec2,)} "
-                                    f"{args[2].upper()})"
-                                ),
-                                subtitle=_("Rates date : {}").format(conv[0]),
-                            )
-                    else:
-                        self.add_item(
-                            title=_("Couldn't download the rates file"),
-                            subtitle=_("{} - check log for more details").format(
-                                ratesxml_returncode
-                            ),
-                        )
-
+                    self.run_conversion(args[0], args[1], args[2])
         else:
             pass
+
+    def run_conversion(self, amount, sourcecurr, destcurr):
+        # First strip any commas from the amount
+        amount = amount.replace(",", "")
+        # Get the rates
+        ratesxml_returncode = self.getrates_xml(self.max_age)
+        if ratesxml_returncode == 200:
+            ratedict = self.populate_rates("eurofxref-daily.xml")
+            conv = self.currconv(ratedict, sourcecurr, destcurr, amount)
+            if len(conv) == 1:
+                # Something has gone wrong
+                self.add_item(title="{}".format(conv[0]))
+            else:
+                # Set up some decimal precisions to use in the result
+                # amount and converted amount use precision as entered. Conversion rate uses min 3 places
+                if "." in amount:
+                    dec_prec = len(amount.split(".")[1])
+                    if dec_prec < 3:
+                        dec_prec2 = 3
+                    else:
+                        dec_prec2 = dec_prec
+                else:
+                    dec_prec = 1
+                    dec_prec2 = 3
+                fmt_str = "%.{0:d}f".format(dec_prec)
+
+                self.add_item(
+                    title=(
+                        f"{locale.format_string(fmt_str, float(amount), grouping=True)} {sourcecurr.upper()} = "
+                        f"{locale.format_string(fmt_str, round(decimal.Decimal(conv[1]), dec_prec), grouping=True)} "
+                        f"{destcurr.upper()} "
+                        f"(1 {sourcecurr.upper()} = "
+                        f"{round(decimal.Decimal(conv[1]) / decimal.Decimal(amount),dec_prec2,)} "
+                        f"{destcurr.upper()})"
+                    ),
+                    subtitle=_("Rates date : {}").format(conv[0]),
+                )
+        else:
+            self.add_item(
+                title=_("Couldn't download the rates file"),
+                subtitle=_("{} - check log for more details").format(
+                    ratesxml_returncode
+                ),
+            )
 
     def populate_rates(self, xml):
         tree = ET.parse(xml)
